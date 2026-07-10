@@ -1,0 +1,6 @@
+name = "propuber-web"
+compatibility_date = "2026-06-30"
+pages_build_output_dir = "dist"
+
+[vars]
+APP_ENV = "production"
