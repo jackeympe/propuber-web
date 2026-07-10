@@ -5,3 +5,6 @@ dist/
 .env
 .env.*
 .vite/
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
