@@ -1,0 +1,7 @@
+/* Minimal global resets; component styles are scoped inline */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  background: #F7F7F7;
+  color: #000000;
+}
