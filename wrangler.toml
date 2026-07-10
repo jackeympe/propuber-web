@@ -4,3 +4,15 @@ pages_build_output_dir = "dist"
 
 [vars]
 APP_ENV = "production"
+# PROPUBER_BACKEND_URL must point at the PUBLIC :5002 backend for the
+# LIVE site. Set via CF Pages dashboard or PATCH /accounts/<id>/pages/projects/propuber-web
+# with {"vars":{"PROPUBER_BACKEND_URL":"https://<your-hosted-backend>"}}.
+# When unset, functions/api/[[path]].js serves a static listings/gigs fallback.
+
+# ── R2 bucket binding (task B) ──────────────────────────────
+# Uncomment AFTER `wrangler r2 bucket create propuber-assets` succeeds
+# (requires R2 enabled in the Cloudflare dashboard — account currently returns code 10042).
+# [r2_buckets]
+# binding = "R2"
+# bucket_name = "propuber-assets"
+# preview_bucket_name = "propuber-assets"
