@@ -100,6 +100,26 @@ export default function PropUberFrontPage() {
 
   const words = ["Property.", "Income.", "Freedom.", "Community."];
 
+  // ── Live data layer (fetches from backend API, falls back to inline constants) ──
+  const [listings, setListings] = useState(LISTINGS);
+  const [gigs, setGigs] = useState(GIGS);
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const [l, g] = await Promise.all([
+          fetch("/api/listings").then(r => r.ok ? r.json() : null),
+          fetch("/api/gigs").then(r => r.ok ? r.json() : null),
+        ]);
+        if (!alive) return;
+        if (l?.data) setListings(l.data);
+        if (g?.data) setGigs(g.data);
+      } catch (_) { /* keep inline fallback */ }
+    };
+    load();
+    return () => { alive = false; };
+  }, []);
+
   useEffect(() => {
     const t = setInterval(() => setHeroWord(p => (p + 1) % words.length), 2600);
     return () => clearInterval(t);
@@ -116,7 +136,7 @@ export default function PropUberFrontPage() {
     setLiked(p => ({ ...p, [id]: !p[id] }));
   };
 
-  const filtered = LISTINGS.filter(l => {
+  const filtered = listings.filter(l => {
     const matchProv = filter === "All SA" || l.location.toLowerCase().includes(filter.toLowerCase());
     const matchSearch = !search || l.title.toLowerCase().includes(search.toLowerCase()) || l.location.toLowerCase().includes(search.toLowerCase());
     return matchProv && matchSearch;
@@ -296,7 +316,7 @@ export default function PropUberFrontPage() {
 
           {/* Right: stacked property cards */}
           <div className="hero-cards" style={{ flex: 1, position: "relative", height: 440 }}>
-            {[LISTINGS[0], LISTINGS[1], LISTINGS[2]].map((l, i) => (
+            {[listings[0], listings[1], listings[2]].map((l, i) => (
               <div key={l.id} onClick={() => setModal(l)} style={{
                 position: "absolute",
                 top: i === 0 ? 0 : i === 1 ? 60 : 30,
@@ -465,7 +485,7 @@ export default function PropUberFrontPage() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 14 }}>
-          {GIGS.map(g => (
+          {gigs.map(g => (
             <div key={g.title} className="gcard"
               style={{
                 background: "rgba(255,255,255,.05)",

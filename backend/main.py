@@ -1,8 +1,11 @@
-from fastapi import FastAPI, HTTPException
+import os
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
 import sys
+import os
+import hmac
 from pathlib import Path
 
 # Make agents/shared importable so we reuse the real approval_gate (single source of truth)
@@ -26,6 +29,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Approval decision auth ──────────────────────────────────
+# The Hard Handshake decision is owner-only. Token is expected via
+#   Authorization: Bearer <PROPUBER_APPROVE_TOKEN>   or   ?token=<...>
+# Env var PROPUBER_APPROVE_TOKEN overrides this default. If unset, a
+# decision is rejected until configured (fail-closed).
+APPROVE_TOKEN = os.environ.get("PROPUBER_APPROVE_TOKEN", "")
+# Default dev token so local testing works; CHANGE / set env in prod.
+DEFAULT_DEV_TOKEN = "propuber-owner-dev"
 
 # ── Data (ported from frontend/src/App.jsx) ──────────────────
 LISTINGS = [
@@ -122,8 +134,22 @@ def request_approval(req: ApprovalRequest):
     }
 
 
+def _check_owner(authorization: Optional[str] = Header(default=None), token: Optional[str] = None):
+    expected = APPROVE_TOKEN or DEFAULT_DEV_TOKEN
+    provided = None
+    if authorization and authorization.lower().startswith("bearer "):
+        provided = authorization.split(" ", 1)[1].strip()
+    elif authorization:
+        provided = authorization.strip()
+    if not provided and token:
+        provided = token
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized — owner token required to decide approvals")
+
+
 @app.post("/api/approval/decide/{request_id}")
-def decide_approval(request_id: str, req: DecisionRequest):
+def decide_approval(request_id: str, req: DecisionRequest, authorization: Optional[str] = Header(default=None), token: Optional[str] = None):
+    _check_owner(authorization=authorization, token=token)
     result = gate.decide(request_id, req.decision, reason=req.reason)
     if not result:
         raise HTTPException(status_code=404, detail="Request not found or already decided")
