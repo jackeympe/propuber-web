@@ -3,3 +3,5 @@
 2026-07-10T15:03:07Z | 1783695787386-3eefce0a | scout | 9000.0 ZAR | REQUEST
 2026-07-10T15:04:29Z | 1783695869989-ca0f3f46 | scout | 9000.0 ZAR | REQUEST
 2026-07-10T15:04:30Z | 1783695869989-ca0f3f46 | scout | 9000.0 ZAR | APPROVED | split: charger_engine=4500.0, operations=2700.0, dividend=769.5, reserve=1030.5
+2026-07-10T15:23:38Z | 1783697018571-0ae4929f | scout | 7000.0 ZAR | REQUEST
+2026-07-10T15:23:38Z | 1783697018571-0ae4929f | scout | 7000.0 ZAR | APPROVED | split: charger_engine=3500.0, operations=2100.0, dividend=598.5, reserve=801.5

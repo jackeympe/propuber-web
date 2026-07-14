@@ -4,13 +4,13 @@ pages_build_output_dir = "dist"
 
 [vars]
 APP_ENV = "production"
-# LIVE backend on Render (Python FastAPI). functions/api/[[path]].js proxies /api/* here.
-PROPUBER_BACKEND_URL = "https://propuber-backend.onrender.com"
+PAYFAST_MODE = "live"
+PAYFAST_MERCHANT_ID = "34149035"
+# PAYFAST_MERCHANT_KEY and PAYFAST_PASSPHRASE are set as ENCRYPTED secrets
+# via: wrangler pages secret put PAYFAST_MERCHANT_KEY --project-name propuber-web
+# (never commit them here). Cash rails run 100% on CF Pages Functions + KV — no Render.
 
-# ── R2 bucket binding (task B) ──────────────────────────────
-# Uncomment AFTER `wrangler r2 bucket create propuber-assets` succeeds
-# (requires R2 enabled in the Cloudflare dashboard — account currently returns code 10042).
-# [r2_buckets]
-# binding = "R2"
-# bucket_name = "propuber-assets"
-# preview_bucket_name = "propuber-assets"
+# Cloudflare KV: settlement ledger + invoice book (replaces Render disk storage)
+[[kv_namespaces]]
+binding = "CASH"
+id = "036b7efa75544cc0809364407490360e"
