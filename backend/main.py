@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -19,6 +19,10 @@ except Exception:
     # Fallback: use the bundled copy if agents/ is unavailable
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import approval_gate as gate
+
+# Payment rails (PayFast checkout + escrow settlement + invoice book)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import payments as pay
 
 app = FastAPI(title="PropUber API", version="0.1.0")
 
@@ -182,3 +186,128 @@ def preview_split(amount: float):
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "propuber-api", "approval_threshold_zar": gate.DEFAULT_THRESHOLD}
+
+
+# ── Payment schemas ──────────────────────────────────────────
+class CheckoutRequest(BaseModel):
+    amount: float
+    item_name: str
+    return_url: str
+    cancel_url: str
+    notify_url: str
+    email: str = ""
+    m_payment_id: str = ""
+
+
+class SettlementRequest(BaseModel):
+    m_payment_id: str
+    amount: float
+    source: str
+    status: str = "COMPLETE"
+    pf_payment_id: str = ""
+
+
+class InvoiceRequest(BaseModel):
+    client: str
+    description: str
+    amount: float
+    subsidiary: str = "SmartBiz Fire Safety"
+    email: str = ""
+
+
+# ── RAIL 1: PayFast checkout (real ZAR in) ───────────────────
+@app.post("/api/pay/checkout")
+def pay_checkout(req: CheckoutRequest):
+    payload = pay.build_payfast_checkout(
+        amount=req.amount, item_name=req.item_name, return_url=req.return_url,
+        cancel_url=req.cancel_url, notify_url=req.notify_url,
+        email=req.email, m_payment_id=req.m_payment_id,
+    )
+    return {"success": True, **payload}
+
+
+@app.post("/api/pay/notify")
+async def pay_notify(request: Request):
+    """PayFast ITN webhook — 4-step verification per PayFast docs, then books cash.
+    1) source IP whitelist  2) signature  3) server confirmation  4) record COMPLETE."""
+    form = await request.form()
+    data = {k: str(v) for k, v in form.items()}
+
+    # Step 1: source IP must be a PayFast server (X-Forwarded-For aware)
+    fwd = request.headers.get("x-forwarded-for", "")
+    client_ip = (fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else ""))
+    if client_ip and not pay.is_payfast_ip(client_ip):
+        raise HTTPException(status_code=403, detail="ITN not from a PayFast IP")
+
+    # Step 2: signature check
+    if not pay.verify_itn(data):
+        raise HTTPException(status_code=400, detail="Invalid ITN signature")
+
+    # Step 3: server-side confirmation ping back to PayFast
+    if not pay.confirm_itn_with_payfast(data):
+        raise HTTPException(status_code=400, detail="PayFast did not confirm ITN")
+
+    # Step 4: book confirmed cash
+    if data.get("payment_status") == "COMPLETE":
+        pay.record_settlement(
+            m_payment_id=data.get("m_payment_id", ""),
+            amount=float(data.get("amount_gross", 0) or 0),
+            source="payfast", status="COMPLETE",
+            pf_payment_id=data.get("pf_payment_id", ""),
+        )
+    return {"success": True}
+
+
+# ── RAIL 2: Escrow / settlement (confirmed real cash) ────────
+@app.post("/api/settlement/record")
+def settlement_record(req: SettlementRequest):
+    entry = pay.record_settlement(
+        m_payment_id=req.m_payment_id, amount=req.amount, source=req.source,
+        status=req.status, pf_payment_id=req.pf_payment_id,
+    )
+    return {"success": True, "entry": entry}
+
+
+@app.get("/api/settlement/totals")
+def settlement_totals():
+    return {"success": True, **pay.settlement_totals()}
+
+
+# ── RAIL 3: Invoice book (land 1 paying job) ─────────────────
+@app.post("/api/invoice/create")
+def invoice_create(req: InvoiceRequest):
+    inv = pay.create_invoice(
+        client=req.client, description=req.description, amount=req.amount,
+        subsidiary=req.subsidiary, email=req.email,
+    )
+    return {"success": True, "invoice": inv}
+
+
+@app.post("/api/invoice/pay/{invoice_id}")
+def invoice_pay(invoice_id: str, authorization: str = Header(default=None), token: Optional[str] = None):
+    _check_owner(authorization=authorization, token=token)
+    inv = pay.mark_invoice_paid(invoice_id)
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    return {"success": True, "invoice": inv}
+
+
+@app.get("/api/invoice/list")
+def invoice_list():
+    return {"success": True, **pay.list_invoices()}
+
+
+@app.get("/api/cash/summary")
+def cash_summary():
+    """Single source of truth for ACTUAL cash: settlement ledger + invoice book."""
+    settled = pay.settlement_totals()
+    invoices = pay.list_invoices()
+    return {
+        "success": True,
+        "real_cash_collected_zar": settled["real_cash_zar"],
+        "settlements": settled["settlements"],
+        "invoices_issued_zar": invoices["issued_zar"],
+        "invoices_paid_zar": invoices["invoices_paid_zar"] if "invoices_paid_zar" in invoices else invoices["paid_zar"],
+        "invoices_outstanding_zar": invoices["outstanding_zar"],
+        "payfast_live_ready": pay._is_live_ready(),
+    }

@@ -8,3 +8,10 @@ dist/
 backend/.venv/
 backend/__pycache__/
 backend/*.pyc
+
+.env.payments
+backend/.env.payments
+memory/settlement-ledger.md
+memory/invoice-book.md
+
+backend/pay-link-*.html

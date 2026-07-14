@@ -1,0 +1,11 @@
+# PropUber backend — container for any Python host (Fly / Railway / Render / Cloud Run)
+FROM python:3.11-slim
+WORKDIR /app
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ ./backend/
+COPY agents/ ./agents/ 2>/dev/null || true
+WORKDIR /app/backend
+ENV PAYFAST_MODE=live
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
