@@ -15,3 +15,8 @@ memory/settlement-ledger.md
 memory/invoice-book.md
 
 backend/pay-link-*.html
+
+.env.deploy
+backend/.env.deploy
+
+backend/.env.xero

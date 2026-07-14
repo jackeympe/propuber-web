@@ -23,6 +23,10 @@ except Exception:
 # Payment rails (PayFast checkout + escrow settlement + invoice book)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import payments as pay
+try:
+    import xero_sync
+except Exception:
+    xero_sync = None
 
 app = FastAPI(title="PropUber API", version="0.1.0")
 
@@ -249,12 +253,25 @@ async def pay_notify(request: Request):
 
     # Step 4: book confirmed cash
     if data.get("payment_status") == "COMPLETE":
+        amount = float(data.get("amount_gross", 0) or 0)
         pay.record_settlement(
             m_payment_id=data.get("m_payment_id", ""),
-            amount=float(data.get("amount_gross", 0) or 0),
+            amount=amount,
             source="payfast", status="COMPLETE",
             pf_payment_id=data.get("pf_payment_id", ""),
         )
+        # Push to Xero accounting (no-op if not configured)
+        if xero_sync and xero_sync.is_configured():
+            try:
+                xero_sync.push_settlement(
+                    client=data.get("name_first", "") + " " + data.get("name_last", ""),
+                    description=data.get("item_name", "PropUber service"),
+                    amount=amount,
+                    reference=data.get("pf_payment_id", "") or data.get("m_payment_id", ""),
+                    email=data.get("email_address", ""),
+                )
+            except Exception:
+                pass
     return {"success": True}
 
 
@@ -271,6 +288,12 @@ def settlement_record(req: SettlementRequest):
 @app.get("/api/settlement/totals")
 def settlement_totals():
     return {"success": True, **pay.settlement_totals()}
+
+
+@app.get("/api/xero/status")
+def xero_status():
+    configured = bool(xero_sync and xero_sync.is_configured())
+    return {"success": True, "xero_configured": configured}
 
 
 # ── RAIL 3: Invoice book (land 1 paying job) ─────────────────
