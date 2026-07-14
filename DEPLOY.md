@@ -1,35 +1,44 @@
-# PropUber Backend — Go-Live Deploy Guide
+# PropUber — Cloudflare-Native Deploy (no Render)
 
-The FastAPI backend (`backend/main.py`) hosts 3 cash rails + the PayFast ITN
-webhook. Cloudflare Pages CANNOT run Python, so the backend needs a Python host.
-Once deployed, set `PROPUBER_BACKEND_URL` on the CF Pages project and `/api/*`
-(including `/api/pay/notify`) proxies through to it.
+All cash rails run **100% on Cloudflare Pages Functions + KV**. There is no
+separate backend server. One platform, one deploy.
 
-## Fastest path — Render (free, ~5 min)
-1. Push repo to GitHub (see git section below).
-2. Go to render.com → New → Blueprint → point at this repo. It reads `render.yaml`.
-3. When prompted, paste the 4 secret env vars (values NOT in repo):
-   - `PAYFAST_MERCHANT_ID`, `PAYFAST_MERCHANT_KEY`, `PAYFAST_PASSPHRASE`, `PROPUBER_APPROVE_TOKEN`
-4. Deploy → you get `https://propuber-backend.onrender.com`. Verify: `curl .../health`.
+## Architecture
+- `functions/api/[[path]].js` — router for all `/api/*` endpoints
+- `functions/_lib/payfast.js` — PayFast checkout, ITN 4-step verify, KV storage
+  (embeds a pure-JS MD5 — verified byte-identical to the old Python signature)
+- **KV namespace `CASH`** (`036b7efa75544cc0809364407490360e`) — settlement ledger
+  + invoice book (replaces Render disk files)
 
-## Wire the frontend proxy
-In Cloudflare Pages → propuber-web → Settings → Environment variables:
+## Endpoints (all on https://propuber-web.pages.dev)
+| Path | Method | Purpose |
+|------|--------|---------|
+| /api/health | GET | liveness |
+| /api/cash/summary | GET | cash truth (KV-backed) |
+| /api/pay/checkout | POST | signed PayFast checkout |
+| /api/pay/notify | POST | ITN webhook (IP + sig + confirm) |
+| /api/settlement/record, /totals | POST/GET | escrow |
+| /api/invoice/create, /list | POST/GET | invoice book |
+| /api/listings, /api/gigs | GET | static reads |
+
+## Config (CF Pages → Settings → Variables)
+- `PAYFAST_MODE=live`, `PAYFAST_MERCHANT_ID=34149035` (plain)
+- `PAYFAST_MERCHANT_KEY`, `PAYFAST_PASSPHRASE` (encrypted secrets)
+- KV binding `CASH` bound in `wrangler.toml`
+
+## Deploy
 ```
-PROPUBER_BACKEND_URL = https://propuber-backend.onrender.com
+export CLOUDFLARE_API_TOKEN=<pages-edit-token>
+export CLOUDFLARE_ACCOUNT_ID=6e3906bcaf0efe7036899df26164d0e1
+node_modules/.bin/wrangler pages deploy dist --project-name propuber-web --commit-dirty=true
 ```
-Redeploy Pages. Now `https://propuber-web.pages.dev/api/pay/notify` reaches FastAPI.
+Token needs **Pages:Edit** to deploy; **Workers KV Storage:Edit** to manage KV.
+Editing project env/KV bindings via REST PATCH needs the Pages:Edit token.
 
-## PayFast dashboard (required for real cash to auto-book)
-1. Settings → set global **notify_url** = `https://propuber-web.pages.dev/api/pay/notify`
-2. Confirm passphrase matches `PAYFAST_PASSPHRASE`.
-3. ITN uses ports 80/8080/8081/443 — CF Pages is 443 ✅.
-4. PayFast ITN source IPs (already whitelisted in code): 197.97.145.144/28,
-   41.74.179.192/27, 102.216.36.0/28, 102.216.36.128/28, 144.126.193.139.
+## PayFast dashboard (final step for auto-booking real cash)
+Settings → global **notify_url** = `https://propuber-web.pages.dev/api/pay/notify`
+Passphrase must match `PAYFAST_PASSPHRASE`. ITN ports 80/8080/8081/443 (CF=443 ✅).
 
-## Alt: quick public tunnel for testing (no deploy)
-Install cloudflared, then: `cloudflared tunnel --url http://localhost:5002`
-Use the printed https URL as `notify_url` for a live test transaction.
-
-## Verify end-to-end
-- `curl https://<backend>/api/cash/summary` → `payfast_live_ready: true`
-- Send a client the pay link → complete payment → `real_cash_collected_zar` increases.
+## Render — DECOMMISSIONED
+Old service `srv-d9b4fd7lk1mc73cehp00` is no longer used. Delete it in the Render
+dashboard to stop the (free) service. `render.yaml` / `Dockerfile` removed from repo.
