@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   buildRequest,
   formatRequest,
@@ -7,30 +7,7 @@ import {
   TELEGRAM_OWNER_ID,
 } from './approval.js';
 
-// Mock the KV storage for testing
-const mockPending = new Map();
-const mockDecided = new Map();
-const mockLedger = '';
-
-vi.mock('../_lib/approval.js', async () => {
-  const actual = await vi.importActual('../_lib/approval.js');
-  return {
-    ...actual,
-    _pending: mockPending,
-    _decided: mockDecided,
-    // We cannot easily mock the KV methods without rewriting the module.
-    // For now, we test the pure functions and leave KV integration for e2e.
-  };
-});
-
-// We'll test the pure functions directly from the module.
-
 describe('Approval Gate (pure functions)', () => {
-  beforeEach(() => {
-    mockPending.clear();
-    mockDecided.clear();
-  });
-
   describe('buildRequest', () => {
     it('should create a request with correct fields', () => {
       const req = buildRequest({
@@ -53,7 +30,7 @@ describe('Approval Gate (pure functions)', () => {
       expect(req.status).toBe('PENDING');
       expect(req.type).toBe('financial');
       expect(req.owner_telegram_id).toBe(TELEGRAM_OWNER_ID);
-      expect(req.created_at).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z/);
+      expect(req.created_at).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{3})?Z/);
     });
   });
 

@@ -14,13 +14,14 @@
     "be:start": "cd backend && .venv/Scripts/uvicorn.exe main:app --host 127.0.0.1 --port 5002"
   },
   "dependencies": {
+    "libsodium-wrappers": "^0.8.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
-    "vitest": "^2.0.5",
     "vite": "^6.0.7",
+    "vitest": "^2.0.5",
     "wrangler": "^4.110.0"
   }
 }

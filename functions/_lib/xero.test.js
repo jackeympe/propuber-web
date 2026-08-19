@@ -107,6 +107,7 @@ describe('Xero Sync (Cloudflare-native)', () => {
       expect(result).toEqual({
         synced: false,
         reason: 'invoice_create_failed',
+        detail: expect.objectContaining({ error: expect.stringContaining('HTTP 400') }),
       });
     });
 
